@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+	<PropertyGroup>
+		<Version>1.0.0.0</Version>
+		<Author>katabame</Author>
+		<Name>NickHider</Name>
+		<Punchline>テンプレートプラグイン</Punchline>
+		<Description>Dalamudのテンプレートプラグインです</Description>
+		<RepoUrl>https://github.com/katabame/NickHider</RepoUrl>
+		<Tags>plugin;katabame</Tags>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	</PropertyGroup>
+</Project>
