@@ -49,7 +49,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
 
 		CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
 		{
-			HelpMessage = "DalamudTemplateのメインウィンドウを表示/非表示します。"
+			HelpMessage = "NickHiderのメインウィンドウを表示/非表示します。"
 		});
 
 		PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
