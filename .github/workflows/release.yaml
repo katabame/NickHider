@@ -47,3 +47,9 @@ jobs:
             ./artifacts/install.zip
             ./artifacts/update.zip
             ./artifacts/${{ env.PLUGIN_NAME }}.json
+
+      - name: Notify to Popoto
+        env:
+          GH_TOKEN: ${{ secrets.POPOTO_DISPATCH_TOKEN }}
+        run: |
+          gh api "repos/${{ github.repository_owner }}/popoto/dispatches" -f event_type=plugin-released
