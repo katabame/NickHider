@@ -1,49 +1,49 @@
 name: Release
 
 on:
-    release:
-        types: [published]
+  release:
+    types: [published]
 
 permissions:
-    contents: write
+  contents: write
 
 jobs:
-    publish:
-        name: Build and Publish Plugin Artifacts
-        runs-on: ubuntu-latest
-        env:
-            DALAMUD_HOME: /tmp/dalamud
-            PLUGIN_NAME: ${{ github.event.repository.name }}
-        steps:
-            - name: Checkout Code
-              uses: actions/checkout@v7
+  publish:
+    name: Build and Publish Plugin Artifacts
+    runs-on: ubuntu-latest
+    env:
+      DALAMUD_HOME: /tmp/dalamud
+      PLUGIN_NAME: ${{ github.event.repository.name }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
 
-            - name: Setup .NET
-              uses: actions/setup-dotnet@v6
-              with:
-                dotnet-version: 10.0.x
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
 
-            - name: Download Dalamud
-              run: |
-                wget -O /tmp/dalamud.zip https://goatcorp.github.io/dalamud-distrib/latest.zip
-                unzip /tmp/dalamud.zip -d $DALAMUD_HOME
+      - name: Download Dalamud
+        run: |
+          wget -O /tmp/dalamud.zip https://goatcorp.github.io/dalamud-distrib/latest.zip
+          unzip /tmp/dalamud.zip -d $DALAMUD_HOME
 
-            - name: Build Plugin
-              run: |
-                dotnet build -c Release -p:EnableWindowsTargeting=true
+      - name: Build Plugin
+        run: |
+          dotnet build -c Release -p:EnableWindowsTargeting=true
 
-            - name: Create Artifacts
-              run: |
-                OUTPUT_DIR="./${PLUGIN_NAME}/bin/x64/Release/${PLUGIN_NAME}"
-                mkdir ./artifacts
-                cp "${OUTPUT_DIR}/latest.zip" ./artifacts/install.zip
-                cp "${OUTPUT_DIR}/latest.zip" ./artifacts/update.zip
-                cp "${OUTPUT_DIR}/${PLUGIN_NAME}.json" ./artifacts/${PLUGIN_NAME}.json
+      - name: Create Artifacts
+        run: |
+          OUTPUT_DIR="./${PLUGIN_NAME}/bin/x64/Release/${PLUGIN_NAME}"
+          mkdir ./artifacts
+          cp "${OUTPUT_DIR}/latest.zip" ./artifacts/install.zip
+          cp "${OUTPUT_DIR}/latest.zip" ./artifacts/update.zip
+          cp "${OUTPUT_DIR}/${PLUGIN_NAME}.json" ./artifacts/${PLUGIN_NAME}.json
 
-            - name: Upload Artifacts
-              uses: softprops/action-gh-release@v3
-              with:
-                files: |
-                    ./artifacts/install.zip
-                    ./artifacts/update.zip
-                    ./artifacts/${{ env.PLUGIN_NAME }}.json
+      - name: Upload Artifacts
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            ./artifacts/install.zip
+            ./artifacts/update.zip
+            ./artifacts/${{ env.PLUGIN_NAME }}.json
