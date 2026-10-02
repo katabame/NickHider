@@ -1,4 +1,6 @@
 # NickHider
+![GitHub Downloads (specific asset, all releases)](https://img.shields.io/github/downloads/katabame/NickHider/install.zip?displayAssetName=false&style=for-the-badge&label=Installs)
+![GitHub Release](https://img.shields.io/github/v/release/katabame/NickHider?style=for-the-badge&label=Version)
 
 匿名化プラグイン
 
