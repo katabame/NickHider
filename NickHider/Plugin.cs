@@ -2,6 +2,7 @@ using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using Dalamud.Game.Command;
 using Dalamud.Game.Gui.NamePlate;
+using Dalamud.Game.Gui.Toast;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.Interface.Windowing;
@@ -11,7 +12,6 @@ using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using NickHider.Windows;
-using Serilog;
 using System;
 using System.Collections.Generic;
 
@@ -29,19 +29,22 @@ public sealed unsafe class Plugin : IDalamudPlugin
 
 	public readonly WindowSystem WindowSystem = new("NickHider");
 	private MainWindow MainWindow { get; init; }
-
-	//private const string ReplacementName = "katabame";
-
 	private readonly INamePlateGui namePlateGui;
 	private readonly IObjectTable objectTable;
 	private readonly IAddonLifecycle addonLifecycle;
+	private readonly IToastGui toastGui;
 
-	public Plugin(INamePlateGui namePlateGui, IObjectTable objectTable, IAddonLifecycle addonLifecycle)
+	public Plugin(
+		INamePlateGui namePlateGui,
+		IObjectTable objectTable,
+		IAddonLifecycle addonLifecycle,
+		IToastGui toastGui
+		)
 	{
 		this.namePlateGui = namePlateGui;
 		this.objectTable = objectTable;
 		this.addonLifecycle = addonLifecycle;
-		
+		this.toastGui = toastGui;
 
 		Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 		MainWindow = new MainWindow(this);
@@ -56,11 +59,10 @@ public sealed unsafe class Plugin : IDalamudPlugin
 		PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
 		namePlateGui.OnNamePlateUpdate += OnNamePlateUpdate;
 		addonLifecycle.RegisterListener(AddonEvent.PreDraw, "_PartyList", OnPartyListPreDraw);
-		addonLifecycle.RegisterListener(AddonEvent.PreDraw, "_TargetInfo", OnTargetInfoPreDraw);
-		addonLifecycle.RegisterListener(AddonEvent.PreDraw, "_TargetInfoMainTarget", OnTargetInfoPreDraw);
-		addonLifecycle.RegisterListener(AddonEvent.PreDraw, "PartyMemberList", OnPartyMemberListPreDraw);
-		addonLifecycle.RegisterListener(AddonEvent.PreDraw, "Character", OnCharacterPreDraw);
-
+		addonLifecycle.RegisterListener(AddonEvent.PreDraw, OnAnyPreDraw);
+		toastGui.Toast += OnToast;
+		toastGui.QuestToast += OnQuestToast;
+		toastGui.ErrorToast += OnErrorToast;
 		Log.Information($"{PluginInterface.Manifest.Name} loaded.");
 	}
 
@@ -70,10 +72,10 @@ public sealed unsafe class Plugin : IDalamudPlugin
 		PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
 		namePlateGui.OnNamePlateUpdate -= OnNamePlateUpdate;
 		addonLifecycle.UnregisterListener(AddonEvent.PreDraw, "_PartyList", OnPartyListPreDraw);
-		addonLifecycle.UnregisterListener(AddonEvent.PreDraw, "_TargetInfo", OnTargetInfoPreDraw);
-		addonLifecycle.UnregisterListener(AddonEvent.PreDraw, "_TargetInfoMainTarget", OnTargetInfoPreDraw);
-		addonLifecycle.UnregisterListener(AddonEvent.PreDraw, "PartyMemberList", OnPartyMemberListPreDraw);
-		addonLifecycle.UnregisterListener(AddonEvent.PreDraw, "Character", OnCharacterPreDraw);
+		addonLifecycle.UnregisterListener(AddonEvent.PreDraw, OnAnyPreDraw);
+		toastGui.Toast -= OnToast;
+		toastGui.QuestToast -= OnQuestToast;
+		toastGui.ErrorToast -= OnErrorToast;
 
 		WindowSystem.RemoveAllWindows();
 		((IDisposable)MainWindow).Dispose();
@@ -126,59 +128,6 @@ public sealed unsafe class Plugin : IDalamudPlugin
 		if (replaced != currentText) nameNode->SetText(replaced);
 	}
 
-	private void OnTargetInfoPreDraw(AddonEvent type, AddonArgs args)
-	{
-		var local = objectTable.LocalPlayer;
-		if (local is null) return;
-
-		var realName = local.Name.TextValue;
-		if (string.IsNullOrEmpty(realName)) return;
-
-		var addon = (AtkUnitBase*)args.Addon.Address;
-		if (addon == null) return;
-
-		for (var i = 0; i < addon->UldManager.NodeListCount; i++)
-		{
-			var node = addon->UldManager.NodeList[i];
-			if (node == null || node->Type != NodeType.Text) continue;
-
-			var textNode = (AtkTextNode*)node;
-			var text = textNode->NodeText.ToString();
-
-			if (!text.Contains(realName)) continue;
-
-			textNode->SetText(text.Replace(realName, Configuration.ReplacementName));
-		}
-	}
-
-	private void OnPartyMemberListPreDraw(AddonEvent type, AddonArgs args)
-	{
-		var local = objectTable.LocalPlayer;
-		if (local is null) return;
-
-		var realName = local.Name.TextValue;
-		if (string.IsNullOrEmpty(realName)) return;
-
-		var addon = (AtkUnitBase*)args.Addon.Address;
-		if (addon == null) return;
-
-		ReplaceInNodes(&addon->UldManager, realName, 0);
-	}
-
-	private void OnCharacterPreDraw(AddonEvent type, AddonArgs args)
-	{
-		var local = objectTable.LocalPlayer;
-		if (local is null) return;
-
-		var realName = local.Name.TextValue;
-		if (string.IsNullOrEmpty(realName)) return;
-
-		var addon = (AtkUnitBase*)args.Addon.Address;
-		if (addon == null) return;
-
-		ReplaceInNodes(&addon->UldManager, realName, 0);
-	}
-
 	private void ReplaceInNodes(AtkUldManager* uld, string realName, int depth)
 	{
 		if (uld == null || uld->NodeList == null || depth > 8) return;
@@ -195,14 +144,69 @@ public sealed unsafe class Plugin : IDalamudPlugin
 
 				if (!text.Contains(realName)) continue;
 
-				var replaced = text.Replace(realName, Configuration.ReplacementName);
-				textNode->SetText(replaced);
+				textNode->SetText(text.Replace(realName, Configuration.ReplacementName));
 			}
 			else if ((int)node->Type >= 1000)
 			{
 				var component = ((AtkComponentNode*)node)->Component;
-				if (component != null) ReplaceInNodes(&component->UldManager, realName, depth + 1);
+				if (component == null) continue;
+				if (component->GetComponentType() == ComponentType.TextInput) continue;
+				ReplaceInNodes(&component->UldManager, realName, depth + 1);
 			}
 		}
 	}
+
+	private static IEnumerable<string> BuildNamePatterns(string realName)
+	{
+		yield return realName;
+
+		var parts = realName.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+		if (parts.Length == 2 && parts[0].Length > 0)
+		{
+			yield return $"{parts[0][0]}. {parts[1]}";
+		}
+	}
+
+	private void ReplaceInSeString(SeString str, string from)
+	{
+		var replacementName = Configuration.ReplacementName;
+
+		foreach (var payload in str.Payloads)
+		{
+			if (payload is TextPayload { Text: { Length: > 0 } text } textPayload && text.Contains(from))
+			{
+				textPayload.Text = text.Replace(from, replacementName);
+			}
+		}
+	}
+
+	private void ReplaceNameInToast(SeString message)
+	{
+		var local = objectTable.LocalPlayer;
+		if (local is null) return;
+
+		var realName = local.Name.TextValue;
+		if (string.IsNullOrEmpty(realName)) return;
+
+		foreach (var pattern in BuildNamePatterns(realName))
+		{
+			ReplaceInSeString(message, pattern);
+		}
+	}
+
+	private void OnAnyPreDraw(AddonEvent type, AddonArgs args)
+	{
+		if (args.AddonName == "_PartyList") return;
+		var local = objectTable.LocalPlayer;
+		if (local is null) return;
+		var realName = local.Name.TextValue;
+		if (string.IsNullOrEmpty(realName)) return;
+		var addon = (AtkUnitBase*)args.Addon.Address;
+		if (addon == null) return;
+		ReplaceInNodes(&addon->UldManager, realName, 0);
+	}
+
+	private void OnToast(ref SeString message, ref ToastOptions options, ref bool isHandled) => ReplaceNameInToast(message);
+	private void OnQuestToast(ref SeString message, ref QuestToastOptions options, ref bool isHandled) => ReplaceNameInToast(message);
+	private void OnErrorToast(ref SeString message, ref bool isHandled) => ReplaceNameInToast(message);
 }
